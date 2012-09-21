@@ -14,31 +14,59 @@
 
 class Jsonrpc5_Service {
 
+    const JSONRPC_VERSION = "2.0";
+
     protected $_registered;
     protected $_registered_object;
 
     protected function _registerFunction($func) {
-        $_registered[$strFunc] = new ReflectionFunction($func);
+        $this->_registered[""][$strFunc] = new ReflectionFunction($func);
+        $this->_registered_object[""][$strFunc] = null;
     }
 
     protected function _registerMethod($method) {
         if (!is_array($method) || count($method) != 2) {
             throw new Jsonrpc5_Exception("Invalid method");
         }
-        $r = new ReflectionMethod(reset($method), end($method));
-        if (!is_callable($method)) {
+        $class = reset($method);
+        $name = end($method);
+        $object = null
+        switch (gettype($class)) {
+            case "object": $rc = ReflectionObject($class);
+                           $object = $class;
+                           break;
+            case "string": $rc = ReflectionClass($class);
+                           $t = $rc->getConstructor();
+                           if ($t instanceof ReflectionFunctionAbstract) {
+                               if ($t->getNumberOfRequiredParameters() > 0) {
+                                   throw new Jsonrpc5_Exception("Unexpect __construct() of $class");
+                               }
+                           }
+                           $object = new $class;
+                           break;
+            default: throw new Jsonrpc5_Exception("Invalid class");
+        }
+
+        $strClass = $rc->getName();
+        if ($rc->hasMethod($name) && $rc->getMethod($name)->isPublic()) {
+            $objRef = $rc->getMethod($name);
+            $strName = $objRef->getName();
+
+            $this->_registered[$strClass][$strName] = $objRef;
+            $this->_registered_object[$strClass][$strName] = $object;
+        } else {
             throw new Jsonrpc5_Exception("Method is not callable (not public)");
         }
-        $this->_registered[$r->getDeclaringClass()][$r->getName()] = $r;
     }
 
     protected function _registerObject($object) {
         $r = new ReflectionObject($object);
         $strClass = $r->getName();
         foreach ($r->getMethods(ReflectionMethod::IS_PUBLIC) as $method) {
-            $this->_registered[$strClass][$method->getName()] = $method;
+            $strName  = $method->getName();
+            $this->_registered[$strClass][$strName] = $method;
+            $this->_registered_object[$strClass][$strName] = $object;
         }
-        $this->_registered_object[$strClass] = $object;
     }
 
     public function __constrcut ($target=NULL) {
@@ -61,13 +89,16 @@ class Jsonrpc5_Service {
             }
         } catch (ReflectionException $e) {
             throw new Jsonrpc5_Exception("Register failed: ".$e->getMessage());
+        } catch (Exception $e) {
+            $this->_log($e);
+            throw new Jsonrpc5_Exception("Register failed: ".$e->getMessage());
         }
 
     }
 
     protected function _validateRequest(array $request) {
 
-        if( !isset($request["jsonrpc"]) || $request["jsonrpc"] !== "2.0" ) return FALSE;
+        if( !isset($request["jsonrpc"]) || $request["jsonrpc"] !== JSONRPC_VERSION ) return FALSE;
 
         if( !isset($request["method"]) || !is_string($request["method"]) ) return FALSE;
         
@@ -79,19 +110,72 @@ class Jsonrpc5_Service {
 
     }
 
+    protected function _getReflection($method) {
+
+        if (isset($this->_registered[$method[0]][$method[1]])) {
+            $objRef = $this->_registered[$method[0]][$method[1]];
+            if ($objRef instanceof ReflectionFunctionAbstract) {
+                return $arrMethod;
+            }
+        }
+
+        return FALSE;
+
+    }
+
     protected function _getMethod($method) {
+
+        $arrMethod = explode(".", $method);
+
+        if (count($arrMethod) > 2) return FALSE;
+
+        if (count($arrMethod) == 2) {
+            if (isset($this->_registered[$arrMethod[0]][$arrMethod[1]])) {
+                return $arrMethod;
+            } 
+        }
+
+        if (count($arrMethod) == 1) {
+            $strMethod = reset($arrMethod);
+            if (isset($this->_registered[""][$strMethod])) {
+                return array("", $strMethod);
+            }
+            if (count($this->_registered) == 1) {
+                $strClass = reset(array_keys($this->_registered));
+                if (isset($this->_registered[$strClass][$strMethod])) {
+                    return array($strClass, $strMethod);
+                }
+            }
+        }
+
         return FALSE;
     }
 
     protected function _getParameter(ReflectionFunctionAbstract $reflection, array $params) {
 
-        return $params
+        $is_assoc = array_keys($params) !== range(0, count($sent)-1);
+        $ret = array();
+
+        foreach ($reflection->getParameters() as $i=>$param) {
+
+            $key = ( $is_assoc ? $param->getName () : $i );
+
+            if (isset($params[$key])) {
+                $ret[$i] = $params[$key];
+            } else {
+                if (! $param->isOptional()) {
+                    return FALSE;
+                }
+            }
+
+        }
+        return $ret;
 
     }
 
     protected function _error($code, $message="", $id=NULL) {
         $arrErr = array(
-            "jsonrpc" => "2.0",
+            "jsonrpc" => JSONRPC_VERSION,
             "error" => array(
                 "code" => $code,
                 "message" => $message,
@@ -102,7 +186,7 @@ class Jsonrpc5_Service {
 
     protected function _result($result, $id=NULL) {
         $arrErr = array(
-            "jsonrpc" => "2.0",
+            "jsonrpc" => JSONRPC_VERSION,
             "result" => $result,
             "id" => $id,
         );
@@ -112,6 +196,20 @@ class Jsonrpc5_Service {
     protected function _log(Exception $e) {
         // do nothing
         return;
+    }
+
+    public function invoke($method, $params) {
+
+        $strClass = $method[0];
+        $strMethod = $method[1];
+
+        if (empty($strClass)) {
+            // invoke a function
+            return call_user_func_array($strMethod, $params);
+        } else {
+            $object = $this->_registered_object[$strClass][$strMethod];
+            return call_user_func_array(array($object, $strMethod), $params);
+        }
     }
 
     public function dispatch($request) {
@@ -135,7 +233,13 @@ class Jsonrpc5_Service {
                 return $this->_error(-32601, "Method not found.", $id);
             }
 
-            $params = $this->_getParameter($method, $jsonrpc["params"]);
+            $reflection = $this->_getReflection($method);
+
+            if ($reflection === FALSE) {
+                return $this->_error(-32601, "Method not found.", $id);
+            }
+
+            $params = $this->_getParameter($reflection, $jsonrpc["params"]);
             if ($params === FALSE) {
                 return $this->_error(-32602, "Invalid params.", $id);
             }
@@ -150,9 +254,6 @@ class Jsonrpc5_Service {
             return $this->_error(-32603, "Internal error.");
         }
 
-    }
-
-    public function invoke() {
     }
 
     public function handle() {

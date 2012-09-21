@@ -40,9 +40,9 @@ class Jsonrpc5_Client {
                 "content" => json_encode($request),
             )
         );
-        var_dump($opts);
 
-        $response = json_decode(file_get_contents($this->_url, FALSE, stream_context_create($opts)), TRUE);
+        $raw = file_get_contents($this->_url, FALSE, stream_context_create($opts));
+        $response = json_decode($raw, TRUE);
 
         if (isset($response["error"])) {
             throw new Jsonrpc_Exception("Request error: ".json_encode($response["error"]));
@@ -50,7 +50,7 @@ class Jsonrpc5_Client {
         if (!isset($response["id"])) {
             throw new Jsonrpc_Exception("Unrecognised package");
         }
-        if ($response["id"] != $req_id) {
+        if ($response["id"] != $this->_id) {
             throw new Jsonrpc_Exception("Incorrect id: req={$req_id}, res={$response["id"]}");
         }
 

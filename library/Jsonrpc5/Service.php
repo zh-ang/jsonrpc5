@@ -226,14 +226,15 @@ class Jsonrpc5_Service {
     }
     /* }}} */
 
-    /* {{{ public function invoke($method, $params)  */
-    public function invoke($method, $params) {
+    /* {{{ protected function _invoke($method, $params)  */
+    protected function _invoke($method, $params) {
 
         $strClass = $method[0];
         $strMethod = $method[1];
 
         ob_start();
-        $intER = error_reporting(0);
+        $strDE = ini_get("display_errors");
+        ini_set("display_errors", 0);
 
         if (empty($strClass)) {
             // invoke a function
@@ -244,7 +245,7 @@ class Jsonrpc5_Service {
             $ret = call_user_func_array(array($object, $strMethod), $params);
         }
 
-        error_reporting($intER);
+        ini_set("display_errors", $strDE);
         ob_end_clean();
 
         return $ret;
@@ -284,7 +285,7 @@ class Jsonrpc5_Service {
                 return $this->_error(-32602, "Invalid params.", $id);
             }
 
-            $ret = $this->invoke($method, $params);
+            $ret = $this->_invoke($method, $params);
 
             return ($id) ? $this->_result($ret, $id) : "";
         } catch (Jsonrpc5_Exception $e) {

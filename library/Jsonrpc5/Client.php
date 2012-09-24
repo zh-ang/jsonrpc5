@@ -19,6 +19,8 @@ class Jsonrpc5_Client {
     protected $_class   = NULL;
     protected $_timeout = NULL;
 
+    protected static $_connection=array();
+
     public function __construct($url=NULL, $timeout=5) {
 
         if ($url) $this->_url = "$url";
@@ -43,25 +45,40 @@ class Jsonrpc5_Client {
             "id" => ($this->_id = mt_rand()),
         );
 
-		$opts = array (
-            "http" => array (
-                "method"  => "POST",
-                "header"  => "Content-type: application/json",
-                "content" => json_encode($request),
-                "timeout" => $this->_timeout,
-            )
+		$opt = array (
+            CURLOPT_URL             => $this->_url,
+            CURLOPT_RETURNTRANSFER  => TRUE,         // return web page
+            CURLOPT_HEADER          => FALSE,        // don't return headers
+            CURLOPT_FOLLOWLOCATION  => FALSE,        // follow redirects
+            CURLOPT_ENCODING        => "",           // handle all encodings
+            CURLOPT_USERAGENT       => "Jsonrpc5 (https://github.com/zh-ang/jsonrpc5)",
+            CURLOPT_AUTOREFERER     => TRUE,         // set referer on redirect
+            CURLOPT_CONNECTTIMEOUT  => 3,            // timeout on connect
+            CURLOPT_TIMEOUT         => $this->_timeout,// timeout on response
+            CURLOPT_POST            => 1,            // i am sending post data
+            CURLOPT_POSTFIELDS      => json_encode($request),
+            CURLOPT_SSL_VERIFYHOST  => 0,            // don't verify ssl
+            CURLOPT_SSL_VERIFYPEER  => FALSE,        //
+            CURLOPT_VERBOSE         => FALSE,        // 
         );
 
-        $raw = file_get_contents($this->_url, FALSE, stream_context_create($opts));
+        $ch = isset(self::$_connection[$this->_url]) ? self::$_connection[$this->_url] : curl_init();
+        curl_setopt_array($ch, $opt);
+        $raw = curl_exec($ch);
+        $errno = curl_errno($ch);
+        
+        if ($errno != CURLE_OK) {
+            throw new Jsonrpc5_Exception("Connection error [{$errno}]");
+        }
+
+        $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+
+        if ($code != 200) {
+            throw new Jsonrpc5_Exception("HTTP Error: [HTTP{$code}]");
+        }
 
         if (empty($raw)) {
             throw new Jsonrpc5_Exception("Empty response");
-        }
-
-        list(,$code) = explode(" ", reset($http_response_header), 3);
-
-        if ($code != 200) {
-            throw new Jsonrpc5_Exception("HTTP Error: ".reset($http_response_header));
         }
 
         $response = json_decode($raw, TRUE);

@@ -17,10 +17,12 @@ class Jsonrpc5_Client {
     protected $_url     = "";
     protected $_id      = 0;
     protected $_class   = NULL;
+    protected $_timeout = NULL;
 
-    public function __construct($url=NULL) {
+    public function __construct($url=NULL, $timeout=5) {
 
         if ($url) $this->_url = "$url";
+        $this->_timeout = doubleval($timeout);
         $this->_id = 0;
         if (is_null($this->_class)) {
             if (get_class($this) != __CLASS__) {
@@ -46,10 +48,22 @@ class Jsonrpc5_Client {
                 "method"  => "POST",
                 "header"  => "Content-type: application/json",
                 "content" => json_encode($request),
+                "timeout" => $this->_timeout,
             )
         );
 
         $raw = file_get_contents($this->_url, FALSE, stream_context_create($opts));
+
+        if (empty($raw)) {
+            throw new Jsonrpc5_Exception("Empty response");
+        }
+
+        list(,$code) = explode(" ", reset($http_response_header), 3);
+
+        if ($code != 200) {
+            throw new Jsonrpc5_Exception("HTTP Error: ".reset($http_response_header));
+        }
+
         $response = json_decode($raw, TRUE);
 
         if (isset($response["error"])) {
@@ -59,7 +73,7 @@ class Jsonrpc5_Client {
             throw new Jsonrpc5_Exception("Unrecognised package");
         }
         if ($response["id"] != $this->_id) {
-            throw new Jsonrpc5_Exception("Incorrect id: req={$req_id}, res={$response["id"]}");
+            throw new Jsonrpc5_Exception("Incorrect id: req={$this->_id}, res={$response["id"]}");
         }
 
         return $response["result"];

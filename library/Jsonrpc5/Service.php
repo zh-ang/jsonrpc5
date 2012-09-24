@@ -232,13 +232,22 @@ class Jsonrpc5_Service {
         $strClass = $method[0];
         $strMethod = $method[1];
 
+        ob_start();
+        $intER = error_reporting(0);
+
         if (empty($strClass)) {
             // invoke a function
-            return call_user_func_array($strMethod, $params);
+            $ret = call_user_func_array($strMethod, $params);
         } else {
+            // invoke a method
             $object = $this->_registered[$strClass][$strMethod];
-            return call_user_func_array(array($object, $strMethod), $params);
+            $ret = call_user_func_array(array($object, $strMethod), $params);
         }
+
+        error_reporting($intER);
+        ob_end_clean();
+
+        return $ret;
     }
     /* }}} */
 

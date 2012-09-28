@@ -62,7 +62,24 @@ class Jsonrpc5_Client {
             CURLOPT_VERBOSE         => FALSE,        // 
         );
 
-        $ch = isset(self::$_connection[$this->_url]) ? self::$_connection[$this->_url] : curl_init();
+        $parse = parse_url($this->_url);
+        $protocol = isset($parse["scheme"]) ? $parse["scheme"] : NULL;
+        if ($protocol == "http" || $protocol == "https") {
+            $ip = isset($parse["host"]) ? gethostbyname($parse["host"]) : "";
+            $port = isset($parse["port"]) ? intval($parse["port"]) : 0;
+            if ($port == 0) {
+                $port = ($protocol == "https") ? 443 : 80;
+            }
+            $tag = "{$ip}:{$port}";
+            if (isset(self::$_connection[$tag])) {
+                $ch = self::$_connection[$tag];
+            } else {
+                $ch = (self::$_connection[$tag] = curl_init());
+            }
+        } else {
+            throw new Jsonrpc5_Exception("Unrecognized protocol: {$protocol}");
+        }
+
         curl_setopt_array($ch, $opt);
         $raw = curl_exec($ch);
         $errno = curl_errno($ch);

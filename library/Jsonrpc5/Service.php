@@ -29,8 +29,7 @@ class Jsonrpc5_Service {
         if (!is_array($method) || count($method) != 2) {
             throw new Jsonrpc5_Exception("Invalid method");
         }
-        $class = reset($method);
-        $name = end($method);
+        list($class, $name) = $method;
         $object = null;
         switch (gettype($class)) {
             case "object": $rc = ReflectionObject($class);
@@ -59,10 +58,10 @@ class Jsonrpc5_Service {
     }
     /* }}} */
 
-    /* {{{ protected function _registerObject($object)  */
-    protected function _registerObject($object) {
+    /* {{{ protected function _registerObject($object, $alias=NULL)  */
+    protected function _registerObject($object, $alias=NULL) {
         $r = new ReflectionObject($object);
-        $strClass = $r->getName();
+        $strClass = $alias ? strval($alias) : $r->getName();
         foreach ($r->getMethods(ReflectionMethod::IS_PUBLIC) as $method) {
             $strName  = $method->getName();
             $this->_registered[$strClass][$strName] = $object;

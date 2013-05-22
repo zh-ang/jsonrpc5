@@ -18,6 +18,7 @@ class Jsonrpc5_Client {
     protected $_id      = 0;
     protected $_class   = NULL;
     protected $_timeout = NULL;
+    protected $_instance = array();
 
     protected static $_connection=array();
 
@@ -34,6 +35,19 @@ class Jsonrpc5_Client {
             }
         }
 
+    }
+
+    public function __get($name) {
+        if ($this->_class == "") {
+            if (empty($this->_instance[$name])) {
+                $ret = clone $this;
+                $ret->_class = $name;
+                $this->_instance[$name] = $name;
+            }
+            return $this->_instance[$name];
+        } else {
+            throw new Jsonrpc5_Exception("Cannot declare from \"$this->_class\" instance");
+        }
     }
 
     public function __call($method, $params) {

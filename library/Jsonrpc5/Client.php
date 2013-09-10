@@ -99,7 +99,8 @@ class Jsonrpc5_Client {
         $errno = curl_errno($ch);
         
         if ($errno != CURLE_OK) {
-            throw new Jsonrpc5_Exception("Connection error [{$errno}]");
+            $errstr = curl_error($ch);
+            throw new Jsonrpc5_Exception("cURL Error: [{$errno}] {$errstr}");
         }
 
         $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);

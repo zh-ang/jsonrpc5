@@ -279,7 +279,9 @@ class Jsonrpc5_Service {
                 return $this->_error(-32601, "Method not found.", $id);
             }
 
-            $params = $this->_getParameter($reflection, $jsonrpc["params"]);
+            if ($params = isset($jsonrpc["params"]) ? (array) $jsonrpc["params"] : array()) {
+                $params = $this->_getParameter($reflection, $params);
+            }
             if ($params === FALSE) {
                 return $this->_error(-32602, "Invalid params.", $id);
             }

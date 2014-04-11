@@ -32,10 +32,10 @@ class Jsonrpc5_Service {
         list($class, $name) = $method;
         $object = null;
         switch (gettype($class)) {
-            case "object": $rc = ReflectionObject($class);
+            case "object": $rc = new ReflectionObject($class);
                            $object = $class;
                            break;
-            case "string": $rc = ReflectionClass($class);
+            case "string": $rc = new ReflectionClass($class);
                            $t = $rc->getConstructor();
                            if ($t instanceof ReflectionFunctionAbstract) {
                                if ($t->getNumberOfRequiredParameters() > 0) {
@@ -290,7 +290,7 @@ class Jsonrpc5_Service {
 
             return ($id) ? $this->_result($ret, $id) : "";
         } catch (Jsonrpc5_Exception $e) {
-            return $this->_error($e->getCode(), $e->getMessage);
+            return $this->_error($e->getCode(), $e->getMessage());
         } catch (Exception $e) {
             $this->_log($e);
             return $this->_error(-32603, "Internal error.");
